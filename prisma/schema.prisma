@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         String   @default("USER")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenants      Tenant[]
+  @@map("users")
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  plan      String   @default("FREE")
+  status    String   @default("ACTIVE")
+  credits   Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation(fields: [ownerId], references: [id])
+  agents    Agent[]
+  runs      AgentRun[]
+  memories  AgentMemory[]
+  plans     TaskPlan[]
+  messages  AgentMessage[]
+  skills    AgentSkill[]
+  @@map("tenants")
+}
+
+model Agent {
+  id             String   @id @default(cuid())
+  tenantId       String
+  name           String
+  slug           String
+  description    String?
+  systemPrompt   String?
+  model          String?
+  tools          Json     @default("[]")
+  permissions    Json     @default("[]")
+  riskLevel      String   @default("LOW")
+  approvalPolicy String   @default("AUTO")
+  specialty      String?
+  keywords       Json     @default("[]")
+  origin         String   @default("MANUAL")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runs           AgentRun[]
+  memories       AgentMemory[]
+  skills         AgentSkill[]
+  @@unique([tenantId, slug])
+  @@index([tenantId, specialty])
+  @@map("agents")
+}
+
+model AgentRun {
+  id          String    @id @default(cuid())
+  tenantId    String
+  agentId     String
+  status      String    @default("PENDING")
+  input       Json?
+  output      Json?
+  trace       Json     @default("[]")
+  tokensUsed  Int      @default(0)
+  creditsUsed Int      @default(0)
+  iterations  Int      @default(0)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  @@index([tenantId, createdAt])
+  @@map("agent_runs")
+}
+
+model AgentMemory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  agentId   String
+  content   String
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  @@index([tenantId, agentId, createdAt])
+  @@map("agent_memories")
+}
+
+model AgentSkill {
+  id            String   @id @default(cuid())
+  tenantId      String
+  agentId       String
+  name          String
+  description   String
+  procedure     Json     @default("[]")
+  evidenceCount Int      @default(0)
+  confidence    Float    @default(0.5)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent         Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  @@unique([agentId, name])
+  @@map("agent_skills")
+}
+
+model TaskPlan {
+  id        String         @id @default(cuid())
+  tenantId  String
+  goal      String
+  status    String         @default("PENDING")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items     TaskPlanItem[]
+  @@index([tenantId, createdAt])
+  @@map("task_plans")
+}
+
+model TaskPlanItem {
+  id          String   @id @default(cuid())
+  planId      String
+  title       String
+  status      String   @default("PENDING")
+  ownerAgentId String?
+  dependencies Json    @default("[]")
+  result      Json?
+  error       String?
+  plan        TaskPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  @@index([planId, status])
+  @@map("task_plan_items")
+}
+
+model AgentMessage {
+  id          String   @id @default(cuid())
+  tenantId    String
+  senderId    String
+  recipientId String
+  text        String
+  visibility  Json     @default("[]")
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, recipientId, createdAt])
+  @@map("agent_messages")
+}
